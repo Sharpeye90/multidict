@@ -1,11 +1,14 @@
 # Some simple testing tasks (sorry, UNIX only).
-.PHONY: all build flake test vtest cov clean doc mypy
-
+.PHONY: all build flake test vtest cov clean doc mypy install dist sources srpm
 
 PYXS = $(wildcard multidict/*.pyx)
 SRC = multidict tests setup.py
+PYTHON  = python
+PROGRAM = multidict
+PACKAGE = python-$(PROGRAM)
+VERSION = $(shell sed -n s/[[:space:]]*Version:[[:space:]]*//p $(PACKAGE).spec)
 
-all: test
+all: build
 
 .install-deps: $(shell find requirements -type f)
 	pip install -r requirements/dev.txt
@@ -80,11 +83,23 @@ doc-spelling:
 	@make -C docs spelling SPHINXOPTS="-W -E"
 
 install:
-	@pip install -U 'pip'
-	@pip install -Ur requirements/dev.txt
+	$(PYTHON) setup.py install --skip-build
 
 install-dev: .develop
 
+build:
+	$(PYTHON) setup.py build
+
+dist: clean
+	$(PYTHON) setup.py sdist
+
+sources: clean
+	@git archive --format=tar --prefix="$(PROGRAM)-$(VERSION)/" \
+		$(shell git rev-parse --verify HEAD) | gzip > "$(PROGRAM)-$(VERSION).tar.gz"
+
+srpm: sources
+	rpmbuild -bs --define "_sourcedir $(CURDIR)" \
+		--define "_srcrpmdir $(CURDIR)" $(PACKAGE).spec
 
 clean:
 	rm -rf `find . -name __pycache__`
@@ -97,11 +112,10 @@ clean:
 	rm -f `find . -type f -name '*.rej' `
 	rm -f .coverage
 	rm -rf coverage
-	rm -rf build
+	rm -rf build dist $(PROGRAM).egg-info $(PROGRAM)-*.tar.gz *.egg *.src.rpm
 	rm -rf cover
 	rm -rf htmlcov
 	make -C docs clean SPHINXBUILD=false
-	python3 setup.py clean
 	rm -f multidict/*.html
 	rm -f multidict/*.so
 	rm -f multidict/*.pyd
